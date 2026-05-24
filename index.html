@@ -1,1 +1,239 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WoS Bear Formation & Weapon Calc</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121824;
+            color: #e2e8f0;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1, h2, h3 { color: #f1f5f9; text-align: center; }
+        .card {
+            background-color: #1e293b;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #94a3b8; }
+        select, input, .slider {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            border: 1px solid #334155;
+            background-color: #0f172a;
+            color: #fff;
+            box-sizing: border-box;
+        }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            text-align: center;
+        }
+        .result-box {
+            background-color: #0f172a;
+            padding: 15px 5px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .result-box span { display: block; font-size: 1.2rem; font-weight: bold; color: #38bdf8; margin-top: 5px; }
+        .success-box {
+            background-color: #064e3b;
+            border: 1px solid #059669;
+            padding: 15px;
+            border-radius: 8px;
+            color: #34d399;
+            margin-top: 15px;
+        }
+        .info-text { font-size: 0.85rem; color: #38bdf8; margin-top: -10px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
 
+    <h1>🐻 WoS Bear Generator</h1>
+    <p style="text-align:center; color:#94a3b8;">Berechne deine 10/10/80 Aufstellung und den Waffen-Bonus.</p>
+
+    <!-- 1. TRUPPEN -->
+    <div class="card">
+        <h2>1. Marsch-Kapazität (Cap)</h2>
+        <label for="capSelect">Wähle dein Marsch-Cap:</label>
+        <select id="capSelect" onchange="toggleCustomCap()">
+            <option value="120000">120.000 (Standard)</option>
+            <option value="80000">80.000 (Standard)</option>
+            <option value="custom">Benutzerdefiniert</option>
+        </select>
+
+        <div id="customCapDiv" style="display:none;">
+            <label for="customCap">Exaktes Cap eingeben:</label>
+            <input type="number" id="customCap" value="100000" oninput="calculateAll()">
+        </div>
+
+        <h3>Deine optimale Aufstellung (10 / 10 / 80):</h3>
+        <div class="results-grid">
+            <div class="result-box">🛡️ Infanterie<span id="infDisplay">12.000</span></div>
+            <div class="result-box">🔱 Lanzen<span id="lanDisplay">12.000</span></div>
+            <div class="result-box">🏹 Schützen<span id="marksDisplay">96.000</span></div>
+        </div>
+    </div>
+
+    <!-- 2. HELDEN -->
+    <div class="card">
+        <h2>2. Helden-Spezialwaffen</h2>
+        <p style="font-size:0.9rem; color:#94a3b8; margin-top:-10px;">Wähle die Helden und das Waffen-Level aus:</p>
+
+        <!-- HELD 1 -->
+        <h3 style="text-align:left; color:#cbd5e1; border-bottom: 1px solid #334155; padding-bottom:5px;">👤 Erster Held (Haupt-Leader)</h3>
+        <label for="hero1">Held auswählen:</label>
+        <select id="hero1" onchange="calculateAll()"></select>
+        
+        <label for="lvl1">Waffen-Level (0 - 30): <span id="lvl1Val" style="color:#fff;">0</span></label>
+        <input type="range" id="lvl1" min="0" max="30" value="0" class="slider" oninput="calculateAll()">
+        <div class="info-text" id="bonus1Text">Waffeneffekt: +0.0%</div>
+
+        <!-- HELD 2 -->
+        <h3 style="text-align:left; color:#cbd5e1; border-bottom: 1px solid #334155; padding-bottom:5px; margin-top:25px;">👤 Zweiter Held (Co-Leader)</h3>
+        <label for="hero2">Held auswählen:</label>
+        <select id="hero2" onchange="calculateAll()"></select>
+        
+        <label for="lvl2">Waffen-Level (0 - 30): <span id="lvl2Val" style="color:#fff;">0</span></label>
+        <input type="range" id="lvl2" min="0" max="30" value="0" class="slider" oninput="calculateAll()">
+        <div class="info-text" id="bonus2Text">Waffeneffekt: +0.0%</div>
+    </div>
+
+    <!-- 3. AUSWERTUNG -->
+    <div class="card">
+        <h2>3. Gesamt-Auswertung</h2>
+        <div class="success-box">
+            🔥 <strong>Zusätzlicher Schadens-Boost:</strong> <span id="totalBonusDisplay" style="font-weight:bold; font-size:1.1rem;">+0.0%</span>
+        </div>
+        <p id="summaryText" style="margin-top:15px; font-size:0.95rem; line-height:1.5; color:#cbd5e1;"></p>
+    </div>
+
+    <script>
+        // Die vollständige Helden-Datenbank
+        const wosHeroes = {
+            "Gen 1: Jasser (Pflicht für Bär)": {base: 4.0, perLvl: 1.2},
+            "Gen 1: Seo-yoon (Angriffs-Boost)": {base: 3.5, perLvl: 1.1},
+            "Gen 1: Molly (Scharfschützin)": {base: 2.5, perLvl: 0.8},
+            "Gen 1: Jeronimo (Allround-Dmg)": {base: 5.0, perLvl: 1.5},
+            "Gen 1: Natalia": {base: 3.0, perLvl: 1.0},
+            "Gen 1: Bahiti": {base: 2.0, perLvl: 0.7},
+            "Gen 1: Jessie (Schadens-Buff)": {base: 2.5, perLvl: 0.8},
+            "Gen 1: Sergey": {base: 1.5, perLvl: 0.5},
+            "Gen 1: Patrick": {base: 1.5, perLvl: 0.5},
+            "Gen 2: Alonso (Bären-König)": {base: 6.0, perLvl: 1.8},
+            "Gen 2: Flint (Allround-Buff)": {base: 4.5, perLvl: 1.3},
+            "Gen 2: Philly": {base: 4.5, perLvl: 1.3},
+            "Gen 3: Greg (Extrem hoher Dmg)": {base: 6.5, perLvl: 1.9},
+            "Gen 3: Mia": {base: 5.5, perLvl: 1.5},
+            "Gen 3: Logan": {base: 5.0, perLvl: 1.4},
+            "Gen 4: Lynn (Scharfschützin)": {base: 7.0, perLvl: 2.0},
+            "Gen 4: Ahmose": {base: 6.0, perLvl: 1.6},
+            "Gen 4: Reina": {base: 6.0, perLvl: 1.6},
+            "Gen 5: Gwen (Top Tier)": {base: 7.5, perLvl: 2.2},
+            "Gen 5: Hector": {base: 6.8, perLvl: 1.9},
+            "Gen 5: Norah": {base: 6.5, perLvl: 1.8},
+            "Gen 6: Renee": {base: 7.8, perLvl: 2.3},
+            "Gen 6: Wu Ming": {base: 8.0, perLvl: 2.4},
+            "Gen 6: Wayne": {base: 7.2, perLvl: 2.0},
+            "Gen 7: Edith": {base: 8.5, perLvl: 2.5},
+            "Gen 7: Gordon": {base: 8.0, perLvl: 2.3},
+            "Gen 7: Bradley": {base: 7.8, perLvl: 2.2},
+            "Gen 8: Magnus": {base: 9.0, perLvl: 2.6},
+            "Gen 8: Xander": {base: 8.5, perLvl: 2.4},
+            "Gen 8: Freda": {base: 8.2, perLvl: 2.3},
+            "Gen 9: Kristoff": {base: 9.5, perLvl: 2.8},
+            "Gen 9: Saria": {base: 9.0, perLvl: 2.6},
+            "Gen 9: Kaelen": {base: 8.8, perLvl: 2.5},
+            "Gen 10: Aktuelle Test-Helden": {base: 10.0, perLvl: 3.0}
+        };
+
+        // Dropdowns beim Start füllen
+        function initDropdowns() {
+            const h1 = document.getElementById("hero1");
+            const h2 = document.getElementById("hero2");
+            
+            Object.keys(wosHeroes).forEach((hero, index) => {
+                let opt1 = document.createElement("option");
+                opt1.value = hero;
+                opt1.textContent = hero;
+                h1.appendChild(opt1);
+
+                let opt2 = document.createElement("option");
+                opt2.value = hero;
+                opt2.textContent = hero;
+                // Jasser als Standard für den zweiten Helden setzen
+                if(hero.includes("Jasser")) opt2.selected = true;
+                h2.appendChild(opt2);
+            });
+        }
+
+        function toggleCustomCap() {
+            const select = document.getElementById("capSelect");
+            const customDiv = document.getElementById("customCapDiv");
+            customDiv.style.display = select.value === "custom" ? "block" : "none";
+            calculateAll();
+        }
+
+        function calculateAll() {
+            // 1. Truppen berechnen
+            const select = document.getElementById("capSelect");
+            let totalCap = parseInt(select.value);
+            if (select.value === "custom") {
+                totalCap = parseInt(document.getElementById("customCap").value) || 0;
+            }
+
+            const inf = Math.floor(totalCap * 0.10);
+            const lan = Math.floor(totalCap * 0.10);
+            const marks = Math.floor(totalCap * 0.80);
+
+            document.getElementById("infDisplay").textContent = inf.toLocaleString('de-DE');
+            document.getElementById("lanDisplay").textContent = lan.toLocaleString('de-DE');
+            document.getElementById("marksDisplay").textContent = marks.toLocaleString('de-DE');
+
+            // 2. Helden berechnen
+            const hero1 = document.getElementById("hero1").value;
+            const lvl1 = parseInt(document.getElementById("lvl1").value);
+            document.getElementById("lvl1Val").textContent = lvl1;
+
+            const hero2 = document.getElementById("hero2").value;
+            const lvl2 = parseInt(document.getElementById("lvl2").value);
+            document.getElementById("lvl2Val").textContent = lvl2;
+
+            let bonus1 = 0;
+            if (lvl1 > 0 && wosHeroes[hero1]) {
+                bonus1 = wosHeroes[hero1].base + (lvl1 * wosHeroes[hero1].perLvl);
+            }
+            document.getElementById("bonus1Text").textContent = `Waffeneffekt: +${bonus1.toFixed(1)}% Angriffs-Bonus`;
+
+            let bonus2 = 0;
+            if (lvl2 > 0 && wosHeroes[hero2]) {
+                bonus2 = wosHeroes[hero2].base + (lvl2 * wosHeroes[hero2].perLvl);
+            }
+            document.getElementById("bonus2Text").textContent = `Waffeneffekt: +${bonus2.toFixed(1)}% Angriffs-Bonus`;
+
+            const totalBonus = bonus1 + bonus2;
+            document.getElementById("totalBonusDisplay").textContent = `+${totalBonus.toFixed(1)}%`;
+
+            // 3. Infotext
+            document.getElementById("summaryText").innerHTML = `
+                Du schickst insgesamt <strong>${marks.toLocaleString('de-DE')} Scharfschützen</strong> los.<br>
+                Deine Spezialwaffen bringen deiner Truppe ein Schadens-Plus von <strong>${totalBonus.toFixed(1)}%</strong>.<br>
+                Deine Infanterie (${inf.toLocaleString('de-DE')}) und Lanzenträger (${lan.toLocaleString('de-DE')}) dienen als perfekter Schild!
+            `;
+        }
+
+        // Init
+        initDropdowns();
+        calculateAll();
+    </script>
+</body>
+</html>
